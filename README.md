@@ -12,13 +12,25 @@ Run this on your **local machine** — it fetches the latest release, unzips it,
 bash <(curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh)
 ```
 
-Auto-detects Arc → Chrome → Brave in that order. To override:
+If multiple browsers are installed you'll get an interactive menu. Supported (in detection order):
+
+- Chromium for Dev
+- Arc
+- Google Chrome Dev
+- Google Chrome Canary
+- Google Chrome Beta
+- Google Chrome
+- Brave Browser
+- Chromium
 
 ```sh
-# pick a specific browser
+# explicit browser (skip the menu)
+curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s -- --browser "Chromium for Dev"
 curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s -- --browser "Arc"
 curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s -- --browser "Google Chrome"
-curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s -- --browser "Brave Browser"
+
+# non-interactive mode (fails with error + list if --browser is omitted)
+curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s -- --no-interact --browser "Arc"
 
 # specific version
 curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s -- --version v0.1.1

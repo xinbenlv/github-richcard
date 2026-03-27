@@ -5,13 +5,11 @@
 #
 #   bash <(curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh)
 #
-# Or, if you have the repo cloned locally:
-#   bash scripts/install.sh
-#
 # Options:
-#   --version v0.1.1   install a specific release tag (default: latest)
-#   --dir ~/my/path    custom install directory       (default: ~/.github-richcard)
-#   --browser arc|chrome|brave|chromium  (default: auto-detect)
+#   --browser "Arc"      explicit browser name (skips interactive prompt)
+#   --version v0.1.1     install a specific release tag (default: latest)
+#   --dir ~/my/path      custom install directory (default: ~/.github-richcard)
+#   --no-interact        fail instead of prompting; requires --browser to be set
 
 set -euo pipefail
 
@@ -19,22 +17,25 @@ REPO="xinbenlv/github-richcard"
 INSTALL_DIR="${GITHUB_RICHCARD_DIR:-$HOME/.github-richcard}"
 VERSION=""
 BROWSER=""
+NO_INTERACT=false
 
 # ── parse args ────────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --version) VERSION="$2"; shift 2 ;;
-    --dir)     INSTALL_DIR="$2"; shift 2 ;;
-    --browser) BROWSER="$2"; shift 2 ;;
-    *) echo "Unknown option: $1" >&2; exit 1 ;;
+    --version)     VERSION="$2";      shift 2 ;;
+    --dir)         INSTALL_DIR="$2";  shift 2 ;;
+    --browser)     BROWSER="$2";      shift 2 ;;
+    --no-interact) NO_INTERACT=true;  shift   ;;
+    *) echo "Unknown option: $1" >&2; exit 1  ;;
   esac
 done
 
 # ── colors ────────────────────────────────────────────────────────────────────
-B="\033[1m"; C="\033[36m"; G="\033[32m"; R="\033[31m"; N="\033[0m"
+B="\033[1m"; C="\033[36m"; G="\033[32m"; R="\033[31m"; Y="\033[33m"; N="\033[0m"
 log() { echo -e "${C}▶${N} $*"; }
 ok()  { echo -e "${G}✔${N} $*"; }
 die() { echo -e "${R}✖${N} $*" >&2; exit 1; }
+warn(){ echo -e "${Y}⚠${N} $*"; }
 
 # ── detect OS ─────────────────────────────────────────────────────────────────
 case "$(uname -s)" in
@@ -43,40 +44,107 @@ case "$(uname -s)" in
   *)      die "Unsupported OS: $(uname -s). Install manually." ;;
 esac
 
-# ── detect browser ────────────────────────────────────────────────────────────
-detect_browser() {
+# ── browser registry ──────────────────────────────────────────────────────────
+# Each entry: "Display Name|/path/to/binary"
+# Order = preference when auto-detecting / display order in the menu.
+
+mac_browsers=(
+  "Chromium for Dev|/Applications/Chromium for Dev.app/Contents/MacOS/Chromium for Dev"
+  "Arc|/Applications/Arc.app/Contents/MacOS/Arc"
+  "Google Chrome Dev|/Applications/Google Chrome Dev.app/Contents/MacOS/Google Chrome Dev"
+  "Google Chrome Canary|/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"
+  "Google Chrome Beta|/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta"
+  "Google Chrome|/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  "Brave Browser|/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+  "Chromium|/Applications/Chromium.app/Contents/MacOS/Chromium"
+)
+
+linux_cmds=(
+  "chromium-for-dev|chromium-for-dev"
+  "google-chrome-unstable|google-chrome-unstable"
+  "google-chrome-beta|google-chrome-beta"
+  "google-chrome|google-chrome"
+  "chromium-browser|chromium-browser"
+  "chromium|chromium"
+  "brave-browser|brave-browser"
+)
+
+# Returns list of installed browser display names
+installed_browsers() {
+  local found=()
   if [[ $OS == mac ]]; then
-    for name in "Arc" "Google Chrome" "Brave Browser" "Chromium"; do
-      [[ -d "/Applications/${name}.app" ]] && echo "$name" && return
+    for entry in "${mac_browsers[@]}"; do
+      local name="${entry%%|*}"
+      local bin="${entry##*|}"
+      [[ -x "$bin" ]] && found+=("$name")
     done
   else
-    for cmd in google-chrome chromium-browser chromium brave-browser; do
-      command -v "$cmd" &>/dev/null && echo "$cmd" && return
+    for entry in "${linux_cmds[@]}"; do
+      local name="${entry%%|*}"
+      local cmd="${entry##*|}"
+      command -v "$cmd" &>/dev/null && found+=("$name")
     done
   fi
-  echo ""
+  printf '%s\n' "${found[@]}"
 }
 
+# Returns binary path for a given display name
 browser_bin() {
-  local name="$1"
+  local target="$1"
   if [[ $OS == mac ]]; then
-    case "$name" in
-      Arc)             echo "/Applications/Arc.app/Contents/MacOS/Arc" ;;
-      "Google Chrome") echo "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ;;
-      "Brave Browser") echo "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" ;;
-      Chromium)        echo "/Applications/Chromium.app/Contents/MacOS/Chromium" ;;
-      *)               die "Unknown browser: $name" ;;
-    esac
+    for entry in "${mac_browsers[@]}"; do
+      local name="${entry%%|*}"
+      local bin="${entry##*|}"
+      [[ "$name" == "$target" ]] && echo "$bin" && return
+    done
   else
-    echo "$name"
+    for entry in "${linux_cmds[@]}"; do
+      local name="${entry%%|*}"
+      local cmd="${entry##*|}"
+      [[ "$name" == "$target" ]] && echo "$cmd" && return
+    done
   fi
+  die "Unknown browser: '$target'. Use --browser with one of the names shown in the menu."
 }
 
+# ── browser selection ─────────────────────────────────────────────────────────
 if [[ -z "$BROWSER" ]]; then
-  BROWSER="$(detect_browser)"
-  [[ -z "$BROWSER" ]] && die "No Chromium-based browser found. Pass --browser <name>."
+  mapfile -t AVAILABLE < <(installed_browsers)
+
+  if [[ ${#AVAILABLE[@]} -eq 0 ]]; then
+    die "No supported Chromium-based browser found. Pass --browser <name>."
+  fi
+
+  if $NO_INTERACT; then
+    echo -e "${R}✖${N} --no-interact set but --browser not specified." >&2
+    echo    "  Installed browsers:" >&2
+    for b in "${AVAILABLE[@]}"; do echo "    --browser \"$b\"" >&2; done
+    exit 1
+  fi
+
+  if [[ ${#AVAILABLE[@]} -eq 1 ]]; then
+    BROWSER="${AVAILABLE[0]}"
+    ok "Only one browser found, using: $BROWSER"
+  else
+    echo -e "\n${B}Select a browser:${N}"
+    for i in "${!AVAILABLE[@]}"; do
+      echo -e "  ${C}$((i+1))${N}) ${AVAILABLE[$i]}"
+    done
+    echo ""
+    while true; do
+      read -rp "Enter number [1-${#AVAILABLE[@]}]: " choice
+      if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#AVAILABLE[@]} )); then
+        BROWSER="${AVAILABLE[$((choice-1))]}"
+        break
+      fi
+      warn "Invalid choice, try again."
+    done
+  fi
 fi
+
 ok "Browser: $BROWSER"
+BIN="$(browser_bin "$BROWSER")"
+[[ -x "$BIN" ]] || die "Binary not found or not executable: $BIN"
 
 # ── resolve version ───────────────────────────────────────────────────────────
 if [[ -z "$VERSION" ]]; then
@@ -96,55 +164,51 @@ mkdir -p "$EXT_DIR"
 TMP_ZIP="$(mktemp).zip"
 
 log "Downloading ${ZIP_URL}…"
-curl -fsSL -o "$TMP_ZIP" "$ZIP_URL" || die "Download failed. Check that $VERSION exists at github.com/${REPO}/releases"
-ok "Downloaded to $TMP_ZIP"
+curl -fsSL -o "$TMP_ZIP" "$ZIP_URL" \
+  || die "Download failed. Check that $VERSION exists at github.com/${REPO}/releases"
+ok "Downloaded"
 
 # ── unzip ─────────────────────────────────────────────────────────────────────
 log "Unzipping to ${EXT_DIR}…"
 unzip -qo "$TMP_ZIP" -d "$EXT_DIR"
 rm "$TMP_ZIP"
 
-# WXT zips the extension into a sub-directory; flatten if needed
+# WXT zips into a subdirectory — flatten if manifest.json isn't at root
 INNER=$(find "$EXT_DIR" -maxdepth 2 -name "manifest.json" | head -1 | xargs dirname)
 if [[ "$INNER" != "$EXT_DIR" && -n "$INNER" ]]; then
   cp -r "$INNER"/. "$EXT_DIR"/
 fi
 ok "Unzipped to ${EXT_DIR}"
 
-# ── update symlink ────────────────────────────────────────────────────────────
+# ── symlink ───────────────────────────────────────────────────────────────────
 LATEST_LINK="${INSTALL_DIR}/latest"
 ln -sfn "$EXT_DIR" "$LATEST_LINK"
 ok "Symlink: ${LATEST_LINK} → ${EXT_DIR}"
 
-# ── launch browser with extension ────────────────────────────────────────────
-BIN="$(browser_bin "$BROWSER")"
-log "Launching ${BROWSER} with extension loaded…"
+# ── launch ────────────────────────────────────────────────────────────────────
+log "Launching ${BROWSER}…"
 
-if [[ $OS == mac ]]; then
-  # macOS: use 'open' so a new window/profile works even if browser is running
-  # --load-extension only works when passed directly to the binary (not via open -a)
-  if pgrep -xq "${BROWSER}" 2>/dev/null || pgrep -f "${BROWSER}" 2>/dev/null; then
-    echo ""
-    echo -e "${B}Browser is already running.${N}"
-    echo "  --load-extension only works at launch time in Chromium."
-    echo "  To load the extension manually:"
-    echo -e "  ${C}1.${N} Open  chrome://extensions  (or arc://extensions)"
-    echo -e "  ${C}2.${N} Enable Developer mode"
-    echo -e "  ${C}3.${N} Click 'Load unpacked' and select:"
-    echo -e "     ${B}${EXT_DIR}${N}"
-  else
-    "$BIN" --load-extension="$EXT_DIR" --no-first-run &
-    ok "Browser launched with extension."
-  fi
+browser_is_running() {
+  pgrep -f "$1" &>/dev/null
+}
+
+print_manual_steps() {
+  echo ""
+  warn "Browser is already running — --load-extension only works at launch time."
+  echo "  Load the extension manually:"
+  echo -e "  ${C}1.${N} Go to  chrome://extensions  (or arc://extensions)"
+  echo -e "  ${C}2.${N} Enable Developer mode (top-right toggle)"
+  echo -e "  ${C}3.${N} Click 'Load unpacked' and select:"
+  echo -e "     ${B}${EXT_DIR}${N}"
+}
+
+if browser_is_running "$BROWSER"; then
+  print_manual_steps
 else
-  # Linux: launch in background
   "$BIN" --load-extension="$EXT_DIR" --no-first-run &
-  ok "Browser launched with extension."
+  ok "Browser launched with extension pre-loaded."
 fi
 
 echo ""
 echo -e "${G}${B}✓ GitHub RichCard ${VERSION} installed!${N}"
 echo -e "  Extension dir: ${B}${EXT_DIR}${N}"
-echo ""
-echo "If the browser was already open, load unpacked from:"
-echo -e "  ${B}${EXT_DIR}${N}"
