@@ -44,20 +44,13 @@ case "$(uname -s)" in
   *)      die "Unsupported OS: $(uname -s). Install manually." ;;
 esac
 
-# ── browser registry ──────────────────────────────────────────────────────────
-# Each entry: "Display Name|/path/to/binary"
-# Order = preference when auto-detecting / display order in the menu.
+# ── browser detection ─────────────────────────────────────────────────────────
+# On macOS: dynamically scan /Applications for any Chromium-family browser.
+# Matches any .app whose name contains: Chrome, Chromium, Arc, Brave, Vivaldi, Opera.
+# On Linux: check PATH for known binary names.
 
-mac_browsers=(
-  "Chromium for Dev|/Applications/Chromium for Dev.app/Contents/MacOS/Chromium for Dev"
-  "Arc|/Applications/Arc.app/Contents/MacOS/Arc"
-  "Google Chrome Dev|/Applications/Google Chrome Dev.app/Contents/MacOS/Google Chrome Dev"
-  "Google Chrome Canary|/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"
-  "Google Chrome Beta|/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta"
-  "Google Chrome|/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-  "Brave Browser|/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
-  "Chromium|/Applications/Chromium.app/Contents/MacOS/Chromium"
-)
+# Priority keywords — apps matching earlier entries sort first in the menu.
+mac_priority=("Chromium for Dev" "Chrome for Dev" "Chrome for Testing" "Arc" "Dev" "Canary" "Beta" "Brave" "Chromium" "Chrome")
 
 linux_cmds=(
   "chromium-for-dev|chromium-for-dev"
@@ -69,42 +62,79 @@ linux_cmds=(
   "brave-browser|brave-browser"
 )
 
+# Score a browser name against the priority list (lower = higher priority)
+priority_score() {
+  local name="$1"
+  local i=0
+  for kw in "${mac_priority[@]}"; do
+    if [[ "$name" == *"$kw"* ]]; then echo "$i"; return; fi
+    (( i++ ))
+  done
+  echo "$i"
+}
+
+# Scan /Applications and ~/Applications for Chromium-family browsers
+scan_mac_browsers() {
+  local pattern='Chrome|Chromium|Arc|Brave|Vivaldi|Opera'
+  local hits=()
+  for dir in "/Applications" "$HOME/Applications"; do
+    [[ -d "$dir" ]] || continue
+    while IFS= read -r app; do
+      local name
+      name="$(basename "$app" .app)"
+      local bin="$app/Contents/MacOS/$name"
+      [[ -x "$bin" ]] && hits+=("$name")
+    done < <(find "$dir" -maxdepth 1 -name "*.app" | grep -E "$pattern")
+  done
+  # Sort by priority score
+  local sorted=()
+  # Simple insertion sort (N is tiny)
+  for name in "${hits[@]}"; do
+    local inserted=false
+    for i in "${!sorted[@]}"; do
+      if (( $(priority_score "$name") < $(priority_score "${sorted[$i]}") )); then
+        sorted=("${sorted[@]:0:$i}" "$name" "${sorted[@]:$i}")
+        inserted=true
+        break
+      fi
+    done
+    $inserted || sorted+=("$name")
+  done
+  printf '%s\n' "${sorted[@]}"
+}
+
 # Returns list of installed browser display names
 installed_browsers() {
-  local found=()
   if [[ $OS == mac ]]; then
-    for entry in "${mac_browsers[@]}"; do
-      local name="${entry%%|*}"
-      local bin="${entry##*|}"
-      [[ -x "$bin" ]] && found+=("$name")
-    done
+    scan_mac_browsers
   else
+    local found=()
     for entry in "${linux_cmds[@]}"; do
       local name="${entry%%|*}"
       local cmd="${entry##*|}"
       command -v "$cmd" &>/dev/null && found+=("$name")
     done
+    printf '%s\n' "${found[@]}"
   fi
-  printf '%s\n' "${found[@]}"
 }
 
 # Returns binary path for a given display name
 browser_bin() {
   local target="$1"
   if [[ $OS == mac ]]; then
-    for entry in "${mac_browsers[@]}"; do
-      local name="${entry%%|*}"
-      local bin="${entry##*|}"
-      [[ "$name" == "$target" ]] && echo "$bin" && return
+    for dir in "/Applications" "$HOME/Applications"; do
+      local bin="$dir/${target}.app/Contents/MacOS/${target}"
+      [[ -x "$bin" ]] && echo "$bin" && return
     done
+    die "Could not find binary for '$target'. Is '${target}.app' in /Applications?"
   else
     for entry in "${linux_cmds[@]}"; do
       local name="${entry%%|*}"
       local cmd="${entry##*|}"
       [[ "$name" == "$target" ]] && echo "$cmd" && return
     done
+    die "Unknown browser: '$target'."
   fi
-  die "Unknown browser: '$target'. Use --browser with one of the names shown in the menu."
 }
 
 # ── browser selection ─────────────────────────────────────────────────────────
