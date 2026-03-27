@@ -262,7 +262,7 @@ else
     echo -e "${R}✖${N} --no-interact requires --browser or --browser-path." >&2
     echo    "  Available browsers:" >&2
     for i in "${!MENU_ENTRIES[@]}"; do
-      local flag=""
+      flag=""
       [[ "${MENU_INSTALLED[$i]}" == "0" ]] && flag=" (not installed)"
       echo "    --browser \"${MENU_ENTRIES[$i]}\"${flag}" >&2
     done
@@ -271,7 +271,7 @@ else
 
   echo -e "\n${B}Select a browser:${N}"
   for i in "${!MENU_ENTRIES[@]}"; do
-    local label="${MENU_ENTRIES[$i]}"
+    label="${MENU_ENTRIES[$i]}"
     if [[ "${MENU_INSTALLED[$i]}" == "1" ]]; then
       echo -e "  ${C}$((i+1))${N}) ${label} ${G}✓${N}"
     else
