@@ -12,7 +12,8 @@
     "deploy": "node scripts/deploy.mjs",
     "deploy:github": "node scripts/deploy.mjs github",
     "deploy:cws": "node scripts/deploy.mjs cws",
-    "deploy:all": "node scripts/deploy.mjs all"
+    "deploy:all": "node scripts/deploy.mjs all",
+    "install:local": "bash scripts/install.sh"
   },
   "devDependencies": {
     "@types/react": "^18.3.0",

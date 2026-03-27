@@ -4,6 +4,29 @@ A Chrome extension that shows extended info about GitHub repositories — one-cl
 
 Inspired by [aitdk.com](https://aitdk.com/extension/).
 
+## Install (one-liner)
+
+Run this on your **local machine** — it fetches the latest release, unzips it, and opens Chrome/Arc/Brave with the extension loaded:
+
+```sh
+bash <(curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh)
+```
+
+Options:
+
+```sh
+# specific version
+bash <(curl -fsSL .../install.sh) -- --version v0.1.1
+
+# specific browser
+bash <(curl -fsSL .../install.sh) -- --browser "Arc"
+
+# custom install directory
+bash <(curl -fsSL .../install.sh) -- --dir ~/extensions/github-richcard
+```
+
+> **If your browser is already open:** the script will print the path — load it via `chrome://extensions` → Developer mode → Load unpacked.
+
 ## Features
 
 - **Slide-in sidebar** on any `github.com/<owner>/<repo>` page
@@ -30,6 +53,13 @@ pnpm zip           # package for Chrome Web Store
 ```
 
 Then load `.output/chrome-mv3/` as an unpacked extension in Chrome.
+
+## Releasing
+
+```bash
+# bump version, then:
+pnpm deploy        # builds, zips, tags, creates GitHub release + uploads zip
+```
 
 ## Version
 
