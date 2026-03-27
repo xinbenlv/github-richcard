@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
-# install.sh — download the latest GitHub RichCard release and load it in a Chromium browser
+# install.sh — download GitHub RichCard and load it in a Chromium browser
 #
-# Run on your LOCAL machine (not the dev server):
-#
+# Run on your LOCAL machine:
 #   bash <(curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh)
 #
 # Options:
-#   --browser "Arc"                explicit browser name from the interactive menu
-#   --browser-path /path/to/bin   use any Chromium binary directly (e.g. Chrome for Testing)
-#   --version v0.1.1              install a specific release tag (default: latest)
-#   --dir ~/my/path               custom install directory (default: ~/.github-richcard)
-#   --no-interact                 fail instead of prompting; requires --browser or --browser-path
-#
-# Chrome for Testing (not in /Applications) example:
-#   bash <(curl -fsSL ...) -- \
-#     --browser-path ~/Downloads/chrome-mac-x64/Google\ Chrome\ for\ Testing.app/Contents/MacOS/Google\ Chrome\ for\ Testing
+#   --browser "Arc"              pick browser by name (skips menu)
+#   --browser-path /path/to/bin  use any binary directly
+#   --version v0.1.2             specific release (default: latest)
+#   --dir ~/my/path              install directory (default: ~/.github-richcard)
+#   --no-interact                fail if --browser/--browser-path not set
 
 set -euo pipefail
 
@@ -25,7 +20,6 @@ BROWSER=""
 BROWSER_PATH=""
 NO_INTERACT=false
 
-# ── parse args ────────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version)      VERSION="$2";       shift 2 ;;
@@ -37,167 +31,301 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# ── colors ────────────────────────────────────────────────────────────────────
-B="\033[1m"; C="\033[36m"; G="\033[32m"; R="\033[31m"; Y="\033[33m"; N="\033[0m"
+B="\033[1m"; C="\033[36m"; G="\033[32m"; R="\033[31m"; Y="\033[33m"; DIM="\033[2m"; N="\033[0m"
 log() { echo -e "${C}▶${N} $*"; }
 ok()  { echo -e "${G}✔${N} $*"; }
 die() { echo -e "${R}✖${N} $*" >&2; exit 1; }
 warn(){ echo -e "${Y}⚠${N} $*"; }
 
-# ── detect OS ─────────────────────────────────────────────────────────────────
 case "$(uname -s)" in
   Darwin) OS=mac ;;
   Linux)  OS=linux ;;
-  *)      die "Unsupported OS: $(uname -s). Use --browser-path to specify a binary." ;;
+  *) die "Unsupported OS. Use --browser-path." ;;
 esac
 
-# ── browser detection (macOS) ─────────────────────────────────────────────────
-# Priority keywords — apps matching earlier entries sort first in the menu.
-mac_priority=("Chromium" "Testing" "Dev" "Canary" "Beta" "Arc" "Brave" "Chrome")
-
-linux_cmds=(
-  "chromium-for-dev|chromium-for-dev"
-  "google-chrome-unstable|google-chrome-unstable"
-  "google-chrome-beta|google-chrome-beta"
-  "google-chrome|google-chrome"
-  "chromium-browser|chromium-browser"
-  "chromium|chromium"
-  "brave-browser|brave-browser"
+# ── browser registry ──────────────────────────────────────────────────────────
+# Format: "Display Name|macOS app name|brew cask|install method"
+# install method: brew | cft (Chrome for Testing direct download) | manual
+mac_registry=(
+  "Chromium|Chromium|chromium|brew"
+  "Google Chrome for Testing|Google Chrome for Testing||cft"
+  "Arc|Arc|arc|brew"
+  "Google Chrome Dev|Google Chrome Dev|google-chrome@dev|brew"
+  "Google Chrome Canary|Google Chrome Canary|google-chrome@canary|brew"
+  "Google Chrome Beta|Google Chrome Beta|google-chrome@beta|brew"
+  "Google Chrome|Google Chrome|google-chrome|brew"
+  "Brave Browser|Brave Browser|brave-browser|brew"
 )
 
-priority_score() {
-  local name="$1" i=0
-  for kw in "${mac_priority[@]}"; do
-    [[ "$name" == *"$kw"* ]] && echo "$i" && return
+linux_registry=(
+  "Chromium|chromium|chromium|apt"
+  "Google Chrome|google-chrome|google-chrome-stable|manual"
+  "Brave Browser|brave-browser|brave-browser|manual"
+)
+
+reg_field() { # reg_field "entry" N  → Nth pipe-delimited field (1-based)
+  local entry="$1" n="$2" i=1 f
+  while IFS= read -r f; do
+    [[ $i -eq $n ]] && echo "$f" && return
     (( i++ ))
-  done
-  echo "$i"
+  done < <(echo "$entry" | tr '|' '\n')
 }
 
-# Scan /Applications and ~/Applications for any Chromium-family .app
-scan_mac_browsers() {
-  local pattern='Chrome|Chromium|Arc|Brave|Vivaldi|Opera'
-  local hits=()
+# Check if a browser is installed
+is_installed_mac() {
+  local app_name="$1"
+  for dir in "/Applications" "$HOME/Applications"; do
+    [[ -x "$dir/${app_name}.app/Contents/MacOS/${app_name}" ]] && return 0
+  done
+  # Also check via dynamic scan in case app name differs slightly
+  local pattern='Chrome|Chromium|Arc|Brave|Vivaldi'
   for dir in "/Applications" "$HOME/Applications"; do
     [[ -d "$dir" ]] || continue
     while IFS= read -r app; do
-      local name bin
-      name="$(basename "$app" .app)"
-      bin="$app/Contents/MacOS/$name"
-      [[ -x "$bin" ]] && hits+=("$name")
-    done < <(find "$dir" -maxdepth 1 -name "*.app" | grep -E "$pattern")
+      local found_name bin
+      found_name="$(basename "$app" .app)"
+      bin="$app/Contents/MacOS/$found_name"
+      [[ "$found_name" == "$app_name" && -x "$bin" ]] && return 0
+    done < <(find "$dir" -maxdepth 1 -name "*.app" 2>/dev/null | grep -E "$pattern" || true)
   done
-  # Insertion sort by priority score
-  local sorted=()
-  for name in "${hits[@]}"; do
-    local inserted=false
-    for i in "${!sorted[@]}"; do
-      if (( $(priority_score "$name") < $(priority_score "${sorted[$i]}") )); then
-        sorted=("${sorted[@]:0:$i}" "$name" "${sorted[@]:$i}")
-        inserted=true
-        break
+  return 1
+}
+
+browser_bin_mac() {
+  local app_name="$1"
+  for dir in "/Applications" "$HOME/Applications"; do
+    local bin="$dir/${app_name}.app/Contents/MacOS/${app_name}"
+    [[ -x "$bin" ]] && echo "$bin" && return
+  done
+  return 1
+}
+
+# ── install helpers ───────────────────────────────────────────────────────────
+
+install_via_brew() {
+  local cask="$1" display="$2"
+  if ! command -v brew &>/dev/null; then
+    warn "Homebrew not found. Install it from https://brew.sh, then run:"
+    echo "  brew install --cask $cask"
+    return 1
+  fi
+  log "Installing ${display} via Homebrew…"
+  brew install --cask "$cask"
+}
+
+install_chrome_for_testing() {
+  local arch
+  arch="$(uname -m)"
+  local platform
+  [[ "$arch" == "arm64" ]] && platform="mac-arm64" || platform="mac-x64"
+
+  log "Fetching latest Chrome for Testing version…"
+  local ver
+  ver=$(curl -fsSL "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_STABLE")
+  [[ -z "$ver" ]] && die "Could not fetch Chrome for Testing version."
+  ok "Latest stable: $ver"
+
+  local zip_url="https://storage.googleapis.com/chrome-for-testing-public/${ver}/${platform}/chrome-${platform}.zip"
+  local tmp_dir
+  tmp_dir="$(mktemp -d)"
+
+  log "Downloading Chrome for Testing ${ver} (${platform})…"
+  curl -fsSL --progress-bar -o "${tmp_dir}/cft.zip" "$zip_url" \
+    || die "Download failed: $zip_url"
+
+  log "Extracting…"
+  unzip -q "${tmp_dir}/cft.zip" -d "${tmp_dir}"
+  rm "${tmp_dir}/cft.zip"
+
+  local app_src
+  app_src="$(find "${tmp_dir}" -maxdepth 3 -name "Google Chrome for Testing.app" | head -1)"
+  [[ -z "$app_src" ]] && die "Could not find Google Chrome for Testing.app in the downloaded zip."
+
+  local dest_dir="$HOME/Applications"
+  mkdir -p "$dest_dir"
+  local dest="${dest_dir}/Google Chrome for Testing.app"
+  [[ -d "$dest" ]] && rm -rf "$dest"
+  cp -r "$app_src" "$dest"
+  rm -rf "$tmp_dir"
+
+  ok "Installed to ${dest}"
+}
+
+install_browser() {
+  local entry="$1"
+  local display app_name cask method
+  display="$(reg_field "$entry" 1)"
+  app_name="$(reg_field "$entry" 2)"
+  cask="$(reg_field "$entry" 3)"
+  method="$(reg_field "$entry" 4)"
+
+  echo ""
+  echo -e "${B}Install ${display}?${N}"
+
+  case "$method" in
+    brew)
+      if [[ -n "$cask" ]]; then
+        echo -e "  Will run: ${C}brew install --cask ${cask}${N}"
+      else
+        echo -e "  ${Y}No brew cask known — manual install required.${N}"
+        method="manual"
+      fi
+      ;;
+    cft)
+      echo -e "  Will download directly from Google's Chrome for Testing endpoint."
+      ;;
+    manual)
+      ;;
+  esac
+
+  if [[ "$method" == "manual" ]]; then
+    warn "Cannot auto-install ${display}."
+    echo "  Please install it manually, then re-run this script."
+    return 1
+  fi
+
+  read -rp "  Proceed? [Y/n] " yn
+  [[ "$yn" =~ ^[Nn] ]] && return 1
+
+  case "$method" in
+    brew) install_via_brew "$cask" "$display" ;;
+    cft)  install_chrome_for_testing ;;
+  esac
+}
+
+# ── build the full browser menu ───────────────────────────────────────────────
+
+build_menu() {
+  # Returns lines: "display_name|installed" (installed=1 or 0)
+  if [[ $OS == mac ]]; then
+    for entry in "${mac_registry[@]}"; do
+      local display app_name
+      display="$(reg_field "$entry" 1)"
+      app_name="$(reg_field "$entry" 2)"
+      if is_installed_mac "$app_name"; then
+        echo "${display}|1"
+      else
+        echo "${display}|0"
       fi
     done
-    $inserted || sorted+=("$name")
-  done
-  printf '%s\n' "${sorted[@]}"
-}
-
-installed_browsers() {
-  if [[ $OS == mac ]]; then
-    scan_mac_browsers
   else
-    local found=()
-    for entry in "${linux_cmds[@]}"; do
-      local name="${entry%%|*}" cmd="${entry##*|}"
-      command -v "$cmd" &>/dev/null && found+=("$name")
+    for entry in "${linux_registry[@]}"; do
+      local display cmd
+      display="$(reg_field "$entry" 1)"
+      cmd="$(reg_field "$entry" 2)"
+      if command -v "$cmd" &>/dev/null; then
+        echo "${display}|1"
+      else
+        echo "${display}|0"
+      fi
     done
-    printf '%s\n' "${found[@]}"
   fi
-}
-
-browser_bin() {
-  local target="$1"
-  if [[ $OS == mac ]]; then
-    for dir in "/Applications" "$HOME/Applications"; do
-      local bin="$dir/${target}.app/Contents/MacOS/${target}"
-      [[ -x "$bin" ]] && echo "$bin" && return
-    done
-    die "Could not find '${target}.app' in /Applications or ~/Applications.
-  If it's elsewhere, use:  --browser-path /path/to/binary"
-  else
-    for entry in "${linux_cmds[@]}"; do
-      local name="${entry%%|*}" cmd="${entry##*|}"
-      [[ "$name" == "$target" ]] && echo "$cmd" && return
-    done
-    die "Unknown browser: '$target'."
-  fi
+  echo "Other (enter path manually)|1"
 }
 
 # ── resolve browser binary ────────────────────────────────────────────────────
+BIN=""
+
 if [[ -n "$BROWSER_PATH" ]]; then
-  # Explicit path — use as-is
-  BROWSER_PATH="${BROWSER_PATH/#\~/$HOME}"          # expand leading ~
+  BROWSER_PATH="${BROWSER_PATH/#\~/$HOME}"
   [[ -x "$BROWSER_PATH" ]] || die "Not executable: $BROWSER_PATH"
   BROWSER="$(basename "$BROWSER_PATH")"
   BIN="$BROWSER_PATH"
-  ok "Browser (path): $BIN"
+  ok "Browser (custom path): $BIN"
+
+elif [[ -n "$BROWSER" ]]; then
+  # Named browser — look up in registry
+  if [[ $OS == mac ]]; then
+    matched=""
+    for entry in "${mac_registry[@]}"; do
+      [[ "$(reg_field "$entry" 1)" == "$BROWSER" ]] && matched="$entry" && break
+    done
+    [[ -z "$matched" ]] && die "Unknown browser name '$BROWSER'. Run without --browser to see the menu."
+    app_name="$(reg_field "$matched" 2)"
+    if ! is_installed_mac "$app_name"; then
+      $NO_INTERACT && die "'$BROWSER' is not installed. Install it first."
+      install_browser "$matched" || die "Installation cancelled."
+    fi
+    BIN="$(browser_bin_mac "$app_name")" || die "Could not find binary for $BROWSER after install."
+  fi
+
 else
-  if [[ -z "$BROWSER" ]]; then
-    AVAILABLE=()
-    while IFS= read -r line; do
-      [[ -n "$line" ]] && AVAILABLE+=("$line")
-    done < <(installed_browsers)
+  # Interactive menu
+  MENU_ENTRIES=()
+  MENU_INSTALLED=()
+  while IFS= read -r line; do
+    MENU_ENTRIES+=("${line%%|*}")
+    MENU_INSTALLED+=("${line##*|}")
+  done < <(build_menu)
 
-    if [[ ${#AVAILABLE[@]} -eq 0 ]]; then
-      die "No Chromium-based browser found in /Applications.
-  Use --browser-path to point directly at a binary (e.g. Chrome for Testing)."
-    fi
+  if $NO_INTERACT; then
+    echo -e "${R}✖${N} --no-interact requires --browser or --browser-path." >&2
+    echo    "  Available browsers:" >&2
+    for i in "${!MENU_ENTRIES[@]}"; do
+      local flag=""
+      [[ "${MENU_INSTALLED[$i]}" == "0" ]] && flag=" (not installed)"
+      echo "    --browser \"${MENU_ENTRIES[$i]}\"${flag}" >&2
+    done
+    exit 1
+  fi
 
-    if $NO_INTERACT; then
-      echo -e "${R}✖${N} --no-interact requires --browser or --browser-path." >&2
-      echo    "  Detected browsers:" >&2
-      for b in "${AVAILABLE[@]}"; do echo "    --browser \"$b\"" >&2; done
-      echo    "  Or use: --browser-path /path/to/binary" >&2
-      exit 1
-    fi
-
-    if [[ ${#AVAILABLE[@]} -eq 1 ]]; then
-      BROWSER="${AVAILABLE[0]}"
-      ok "Only one browser found, using: $BROWSER"
+  echo -e "\n${B}Select a browser:${N}"
+  for i in "${!MENU_ENTRIES[@]}"; do
+    local label="${MENU_ENTRIES[$i]}"
+    if [[ "${MENU_INSTALLED[$i]}" == "1" ]]; then
+      echo -e "  ${C}$((i+1))${N}) ${label} ${G}✓${N}"
     else
-      echo -e "\n${B}Select a browser:${N}"
-      for i in "${!AVAILABLE[@]}"; do
-        echo -e "  ${C}$((i+1))${N}) ${AVAILABLE[$i]}"
+      echo -e "  ${C}$((i+1))${N}) ${label} ${DIM}(not installed — will offer to install)${N}"
+    fi
+  done
+  echo ""
+
+  chosen_idx=""
+  while true; do
+    read -rp "Enter number [1-${#MENU_ENTRIES[@]}]: " choice
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#MENU_ENTRIES[@]} )); then
+      chosen_idx=$(( choice - 1 ))
+      break
+    fi
+    warn "Invalid choice, try again."
+  done
+
+  chosen_name="${MENU_ENTRIES[$chosen_idx]}"
+  chosen_installed="${MENU_INSTALLED[$chosen_idx]}"
+
+  if [[ "$chosen_name" == "Other (enter path manually)" ]]; then
+    read -rp "Binary path: " BROWSER_PATH
+    BROWSER_PATH="${BROWSER_PATH/#\~/$HOME}"
+    [[ -x "$BROWSER_PATH" ]] || die "Not executable: $BROWSER_PATH"
+    BROWSER="$(basename "$BROWSER_PATH")"
+    BIN="$BROWSER_PATH"
+  else
+    BROWSER="$chosen_name"
+    if [[ "$chosen_installed" == "0" ]]; then
+      # Find registry entry and install
+      reg_entry=""
+      if [[ $OS == mac ]]; then
+        for entry in "${mac_registry[@]}"; do
+          [[ "$(reg_field "$entry" 1)" == "$BROWSER" ]] && reg_entry="$entry" && break
+        done
+      fi
+      [[ -z "$reg_entry" ]] && die "No registry entry for '$BROWSER'."
+      install_browser "$reg_entry" || die "Installation of '$BROWSER' failed or was cancelled."
+    fi
+    if [[ $OS == mac ]]; then
+      app_name=""
+      for entry in "${mac_registry[@]}"; do
+        [[ "$(reg_field "$entry" 1)" == "$BROWSER" ]] && app_name="$(reg_field "$entry" 2)" && break
       done
-      echo -e "  ${C}$((${#AVAILABLE[@]}+1))${N}) Other (enter path manually)"
-      echo ""
-      while true; do
-        read -rp "Enter number [1-$((${#AVAILABLE[@]}+1))]: " choice
-        if [[ "$choice" =~ ^[0-9]+$ ]]; then
-          if (( choice == ${#AVAILABLE[@]}+1 )); then
-            read -rp "Binary path: " BROWSER_PATH
-            BROWSER_PATH="${BROWSER_PATH/#\~/$HOME}"
-            [[ -x "$BROWSER_PATH" ]] || die "Not executable: $BROWSER_PATH"
-            BROWSER="$(basename "$BROWSER_PATH")"
-            BIN="$BROWSER_PATH"
-            break
-          elif (( choice >= 1 && choice <= ${#AVAILABLE[@]} )); then
-            BROWSER="${AVAILABLE[$((choice-1))]}"
-            break
-          fi
-        fi
-        warn "Invalid choice, try again."
-      done
+      BIN="$(browser_bin_mac "$app_name")" || die "Binary not found for $BROWSER."
+    else
+      BIN="$BROWSER"
     fi
   fi
-
-  if [[ -z "${BIN:-}" ]]; then
-    BIN="$(browser_bin "$BROWSER")"
-  fi
-  [[ -x "$BIN" ]] || die "Binary not found or not executable: $BIN"
-  ok "Browser: $BROWSER"
 fi
+
+[[ -x "$BIN" ]] || die "Binary not found or not executable: $BIN"
+ok "Browser: $BROWSER"
 
 # ── resolve version ───────────────────────────────────────────────────────────
 if [[ -z "$VERSION" ]]; then
@@ -208,51 +336,40 @@ if [[ -z "$VERSION" ]]; then
 fi
 ok "Version: $VERSION"
 
-# ── download ──────────────────────────────────────────────────────────────────
+# ── download extension ────────────────────────────────────────────────────────
 ZIP_NAME="github-richcard-${VERSION#v}-chrome.zip"
 ZIP_URL="https://github.com/${REPO}/releases/download/${VERSION}/${ZIP_NAME}"
 EXT_DIR="${INSTALL_DIR}/${VERSION}"
-
 mkdir -p "$EXT_DIR"
 TMP_ZIP="$(mktemp).zip"
 
-log "Downloading ${ZIP_URL}…"
+log "Downloading extension…"
 curl -fsSL -o "$TMP_ZIP" "$ZIP_URL" \
   || die "Download failed. Does $VERSION exist at github.com/${REPO}/releases?"
 ok "Downloaded"
 
-# ── unzip ─────────────────────────────────────────────────────────────────────
 log "Unzipping to ${EXT_DIR}…"
 unzip -qo "$TMP_ZIP" -d "$EXT_DIR"
 rm "$TMP_ZIP"
 
-# WXT zips into a subdirectory — flatten if manifest.json isn't at root
 INNER=$(find "$EXT_DIR" -maxdepth 2 -name "manifest.json" | head -1 | xargs dirname)
 if [[ "$INNER" != "$EXT_DIR" && -n "$INNER" ]]; then
   cp -r "$INNER"/. "$EXT_DIR"/
 fi
-ok "Unzipped to ${EXT_DIR}"
+ok "Unzipped"
 
-# ── symlink ───────────────────────────────────────────────────────────────────
-LATEST_LINK="${INSTALL_DIR}/latest"
-ln -sfn "$EXT_DIR" "$LATEST_LINK"
-ok "Symlink: ${LATEST_LINK} → ${EXT_DIR}"
+ln -sfn "$EXT_DIR" "${INSTALL_DIR}/latest"
 
 # ── launch ────────────────────────────────────────────────────────────────────
 log "Launching ${BROWSER}…"
 
-print_manual_steps() {
+if pgrep -f "$BROWSER" &>/dev/null; then
   echo ""
   warn "Browser is already running — --load-extension only works at launch time."
-  echo "  Load the extension manually:"
   echo -e "  ${C}1.${N} Go to  chrome://extensions"
   echo -e "  ${C}2.${N} Enable Developer mode (top-right toggle)"
   echo -e "  ${C}3.${N} Click 'Load unpacked' and select:"
   echo -e "     ${B}${EXT_DIR}${N}"
-}
-
-if pgrep -f "$BROWSER" &>/dev/null; then
-  print_manual_steps
 else
   "$BIN" --load-extension="$EXT_DIR" --no-first-run &
   ok "Browser launched with extension pre-loaded."
