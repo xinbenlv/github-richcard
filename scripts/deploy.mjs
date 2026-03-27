@@ -29,7 +29,8 @@ const ROOT = join(__dirname, '..');
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function run(cmd, opts = {}) {
-  return execSync(cmd, { cwd: ROOT, stdio: 'pipe', ...opts }).toString().trim();
+  const result = execSync(cmd, { cwd: ROOT, stdio: 'pipe', ...opts });
+  return result ? result.toString().trim() : '';
 }
 
 function log(msg) { console.log(`\x1b[36m▶\x1b[0m ${msg}`); }
