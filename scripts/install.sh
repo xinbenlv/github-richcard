@@ -109,7 +109,10 @@ browser_bin() {
 
 # ── browser selection ─────────────────────────────────────────────────────────
 if [[ -z "$BROWSER" ]]; then
-  mapfile -t AVAILABLE < <(installed_browsers)
+  AVAILABLE=()
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && AVAILABLE+=("$line")
+  done < <(installed_browsers)
 
   if [[ ${#AVAILABLE[@]} -eq 0 ]]; then
     die "No supported Chromium-based browser found. Pass --browser <name>."
