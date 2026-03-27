@@ -12,17 +12,19 @@ Run this on your **local machine** — it fetches the latest release, unzips it,
 bash <(curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh)
 ```
 
-Options:
+Auto-detects Arc → Chrome → Brave in that order. To override:
 
 ```sh
-# specific version
-bash <(curl -fsSL .../install.sh) -- --version v0.1.1
+# pick a specific browser
+curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s -- --browser "Arc"
+curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s -- --browser "Google Chrome"
+curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s -- --browser "Brave Browser"
 
-# specific browser
-bash <(curl -fsSL .../install.sh) -- --browser "Arc"
+# specific version
+curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s -- --version v0.1.1
 
 # custom install directory
-bash <(curl -fsSL .../install.sh) -- --dir ~/extensions/github-richcard
+curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s -- --dir ~/extensions/github-richcard
 ```
 
 > **If your browser is already open:** the script will print the path — load it via `chrome://extensions` → Developer mode → Load unpacked.
