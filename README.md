@@ -24,19 +24,24 @@ If multiple browsers are installed you'll get an interactive menu. Supported (in
 - Chromium
 
 ```sh
-# explicit browser (skip the menu)
-curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s -- --browser "Chromium for Dev"
-curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s -- --browser "Arc"
-curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s -- --browser "Google Chrome"
+INSTALL="curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s --"
 
-# non-interactive mode (fails with error + list if --browser is omitted)
-curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s -- --no-interact --browser "Arc"
+# pick from interactive menu (default)
+bash <(curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh)
+
+# explicit browser name (must be in /Applications)
+... | bash -s -- --browser "Chromium"
+... | bash -s -- --browser "Arc"
+... | bash -s -- --browser "Google Chrome for Testing"
+
+# Chrome for Testing or any binary not in /Applications — use --browser-path
+... | bash -s -- --browser-path ~/Downloads/chrome-mac-x64/"Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+
+# non-interactive (CI / scripted) — requires --browser or --browser-path
+... | bash -s -- --no-interact --browser "Chromium"
 
 # specific version
-curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s -- --version v0.1.1
-
-# custom install directory
-curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/main/scripts/install.sh | bash -s -- --dir ~/extensions/github-richcard
+... | bash -s -- --version v0.1.2
 ```
 
 > **If your browser is already open:** the script will print the path — load it via `chrome://extensions` → Developer mode → Load unpacked.
