@@ -8,7 +8,11 @@
     "build": "wxt build",
     "zip": "wxt zip",
     "postinstall": "wxt prepare",
-    "icons": "node scripts/gen-icons.mjs"
+    "icons": "node scripts/gen-icons.mjs",
+    "deploy": "node scripts/deploy.mjs",
+    "deploy:github": "node scripts/deploy.mjs github",
+    "deploy:cws": "node scripts/deploy.mjs cws",
+    "deploy:all": "node scripts/deploy.mjs all"
   },
   "devDependencies": {
     "@types/react": "^18.3.0",
