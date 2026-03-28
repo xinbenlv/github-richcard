@@ -363,7 +363,7 @@ ln -sfn "$EXT_DIR" "${INSTALL_DIR}/latest"
 # ── launch ────────────────────────────────────────────────────────────────────
 log "Launching ${BROWSER}…"
 
-if pgrep -f "$BROWSER" &>/dev/null; then
+if pgrep -f "$BIN" &>/dev/null; then
   echo ""
   warn "Browser is already running — --load-extension only works at launch time."
   echo -e "  ${C}1.${N} Go to  chrome://extensions"
