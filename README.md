@@ -48,6 +48,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/xinbenlv/github-richcard/mai
 
 ## Features
 
+- **Following Badge** — avatars of users you follow get a small green ✓ badge (bottom-right corner), so you can instantly spot people you follow across any GitHub page
 - **Slide-in sidebar** on any `github.com/<owner>/<repo>` page
 - **One-click DeepWiki** — jump straight to `deepwiki.com/<owner>/<repo>`
 - Stars, forks, open issues, watchers, language, license, topics
@@ -79,6 +80,15 @@ Then load `.output/chrome-mv3/` as an unpacked extension in Chrome.
 # bump version, then:
 pnpm deploy        # builds, zips, tags, creates GitHub release + uploads zip
 ```
+
+## Following Badge
+
+When you're logged into GitHub, the extension automatically detects users you follow and adds a small green checkmark badge to their avatars across the site — on profile pages, issue threads, PR reviews, commit lists, and more.
+
+- Badges appear on avatars of users in your following list
+- Your own avatar is never badged
+- The following list is fetched once per session and cached in `sessionStorage` to avoid hitting API rate limits
+- Uses a `MutationObserver` to handle dynamically loaded content (infinite scroll, SPA navigation)
 
 ## Version
 
