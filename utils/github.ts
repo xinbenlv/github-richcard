@@ -45,6 +45,7 @@ export function parseGithubRepo(url: string): ParsedGithubRepo | null {
 export async function fetchRepoInfo(owner: string, repo: string): Promise<RepoInfo> {
   const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
     headers: { Accept: 'application/vnd.github.v3+json' },
+    credentials: 'include',
   });
   if (!res.ok) throw new Error(`GitHub API ${res.status}: ${res.statusText}`);
   const d = await res.json();
