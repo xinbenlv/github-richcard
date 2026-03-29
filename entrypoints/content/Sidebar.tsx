@@ -8,6 +8,7 @@ import {
   type RepoInfo,
 } from '../../utils/github';
 import { VERSION_LABEL } from '../../utils/version';
+import { CollaborationGraph } from './CollaborationGraph';
 
 type State =
   | { phase: 'idle' }
@@ -283,6 +284,9 @@ function RepoDetail({ info }: { info: RepoInfo }) {
         <OutlineLink href={`https://bundlephobia.com/package/${info.repo}`} label="Bundlephobia" />
         <OutlineLink href={`https://www.npmjs.com/package/${info.repo}`} label="npm" />
       </div>
+
+      {/* Collaboration Graph */}
+      <CollaborationGraph owner={info.owner} repo={info.repo} />
     </div>
   );
 }
