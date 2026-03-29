@@ -69,11 +69,11 @@ export function Sidebar() {
         title="Toggle GitHub RichCard"
         style={{
           position: 'fixed',
-          right: open ? '348px' : '0',
+          right: 0,
           top: '50%',
-          transform: 'translateY(-50%)',
+          transform: `translateX(${open ? '-348px' : '0px'}) translateY(-50%)`,
           zIndex: 2147483646,
-          transition: 'right 0.3s cubic-bezier(0.4,0,0.2,1)',
+          transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           background: '#0ea5e9',
           border: 'none',
           borderRadius: '6px 0 0 6px',
@@ -101,7 +101,7 @@ export function Sidebar() {
         style={{
           position: 'fixed',
           top: 0,
-          right: open ? 0 : '-360px',
+          right: 0,
           width: '348px',
           height: '100vh',
           zIndex: 2147483645,
@@ -109,7 +109,8 @@ export function Sidebar() {
           boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
           display: 'flex',
           flexDirection: 'column',
-          transition: 'right 0.3s cubic-bezier(0.4,0,0.2,1)',
+          transform: open ? 'translateX(0)' : 'translateX(100%)',
+          transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
           fontSize: '13px',
           color: '#1f2937',

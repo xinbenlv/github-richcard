@@ -75,6 +75,54 @@ export function deepwikiUrl(owner: string, repo: string): string {
   return `https://deepwiki.com/${owner}/${repo}`;
 }
 
+/**
+ * Fetch the full list of users that `me` is following.
+ * Results are cached in sessionStorage to avoid repeat API calls / rate limits.
+ */
+export async function fetchFollowing(me: string): Promise<Set<string>> {
+  const cacheKey = `grc:following:${me}`;
+  const cached = sessionStorage.getItem(cacheKey);
+  if (cached) {
+    try {
+      return new Set(JSON.parse(cached) as string[]);
+    } catch {
+      // corrupted cache, refetch
+    }
+  }
+
+  const logins: string[] = [];
+  let page = 1;
+  const perPage = 100;
+
+  while (true) {
+    const res = await fetch(
+      `https://api.github.com/users/${me}/following?per_page=${perPage}&page=${page}`,
+      {
+        headers: { Accept: 'application/vnd.github.v3+json' },
+        credentials: 'include',
+      },
+    );
+    if (!res.ok) {
+      // On rate limit or error, return whatever we have so far
+      console.warn(`[GRC] fetchFollowing page ${page} failed: ${res.status}`);
+      break;
+    }
+    const data: { login: string }[] = await res.json();
+    if (data.length === 0) break;
+    for (const u of data) logins.push(u.login);
+    if (data.length < perPage) break;
+    page++;
+  }
+
+  try {
+    sessionStorage.setItem(cacheKey, JSON.stringify(logins));
+  } catch {
+    // sessionStorage full — that's fine, we still have the in-memory set
+  }
+
+  return new Set(logins);
+}
+
 export function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
