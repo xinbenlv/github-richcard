@@ -58,7 +58,15 @@ function getCommit() {
 async function deployGithub() {
   log(`Deploying GitHub release ${TAG}…`);
 
-  const token = requireEnv('XINBENLV_PAT_FOR_PUBLIC_REPO');
+  const PAT_ENV =
+    process.env.GITHUB_PAT_XINBENLV_PUBLIC_REPO_ALL_READWRITE
+      ? 'GITHUB_PAT_XINBENLV_PUBLIC_REPO_ALL_READWRITE'
+      : 'XINBENLV_PAT_FOR_PUBLIC_REPO';
+  const token = requireEnv(PAT_ENV);
+  // Inline credential helper: reads PAT from env var by name (never embeds
+  // the value in URL/command). Empty `credential.helper=` first clears any
+  // inherited helper (e.g. macOS Keychain) so this one wins.
+  const CRED_FLAGS = `-c credential.helper= -c 'credential.helper=!f() { echo username=xinbenlv; echo "password=\$${PAT_ENV}"; }; f'`;
 
   // 1. Ensure working tree is clean
   const dirty = run('git status --porcelain');
@@ -82,7 +90,7 @@ async function deployGithub() {
   // 5. Create and push git tag
   log(`Creating tag ${TAG}…`);
   run(`git tag -a ${TAG} -m "Release ${TAG}"`);
-  run(`git push origin ${TAG}`);
+  run(`git ${CRED_FLAGS} push origin ${TAG}`);
   ok(`Tag ${TAG} pushed`);
 
   // 6. Create GitHub release via API
