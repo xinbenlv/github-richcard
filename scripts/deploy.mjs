@@ -88,6 +88,7 @@ async function deployGithub() {
   // 6. Create GitHub release via API
   log('Creating GitHub release…');
   const commit = getCommit();
+  const changelogSection = extractChangelogSection(VERSION);
   const releaseBody = [
     `## GitHub RichCard ${TAG}`,
     '',
@@ -100,7 +101,7 @@ async function deployGithub() {
     'Or manually: download the `.zip` from Assets, unzip, and load unpacked in `chrome://extensions`.',
     '',
     '### Changes',
-    '_See commit history for details._',
+    changelogSection ?? '_See commit history for details._',
   ].join('\n');
 
   const releaseRes = await ghApi(token, 'POST', '/repos/xinbenlv/github-richcard/releases', {
@@ -160,6 +161,19 @@ function findZip() {
     const result = run('find .output -name "*.zip" | head -1');
     return result ? join(ROOT, result) : null;
   } catch { return null; }
+}
+
+function extractChangelogSection(version) {
+  const path = join(ROOT, 'CHANGELOG.md');
+  if (!existsSync(path)) return null;
+  const lines = readFileSync(path, 'utf8').split('\n');
+  const escaped = version.replace(/\./g, '\\.');
+  const startIdx = lines.findIndex((l) => new RegExp(`^##\\s*\\[?${escaped}\\]?`).test(l));
+  if (startIdx === -1) return null;
+  const rest = lines.slice(startIdx + 1);
+  const endOffset = rest.findIndex((l) => /^##\s/.test(l));
+  const body = (endOffset === -1 ? rest : rest.slice(0, endOffset)).join('\n').trim();
+  return body || null;
 }
 
 async function ghApi(token, method, path, body) {
