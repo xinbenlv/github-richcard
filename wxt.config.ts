@@ -18,6 +18,12 @@ export default defineConfig({
       'Extended info for GitHub repos — one-click DeepWiki, stars, forks, issues, and more',
     permissions: ['storage', 'activeTab'],
     host_permissions: ['https://github.com/*', 'https://api.github.com/*'],
+    browser_specific_settings: {
+      gecko: {
+        id: 'github-richcard@xinbenlv',
+        strict_min_version: '109.0',
+      },
+    },
   },
   vite: () => ({
     define: {

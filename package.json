@@ -1,6 +1,6 @@
 {
   "name": "github-richcard",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "Chrome extension — extended info for GitHub repos: DeepWiki, stats, and more",
   "private": true,
   "scripts": {
@@ -11,6 +11,7 @@
     "icons": "node scripts/gen-icons.mjs",
     "deploy": "node scripts/deploy.mjs",
     "deploy:github": "node scripts/deploy.mjs github",
+    "deploy:firefox": "node scripts/deploy.mjs firefox",
     "deploy:cws": "node scripts/deploy.mjs cws",
     "deploy:all": "node scripts/deploy.mjs all",
     "install:local": "bash scripts/install.sh"
@@ -22,7 +23,9 @@
     "@types/react-dom": "^18.3.0",
     "@wxt-dev/module-react": "^1.1.0",
     "autoprefixer": "^10.4.20",
+    "google-auth-library": "^10.6.2",
     "postcss": "^8.4.49",
+    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
     "wxt": "^0.20.20"
