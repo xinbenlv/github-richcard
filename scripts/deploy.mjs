@@ -172,19 +172,20 @@ async function deployFirefox({ firefoxZip, sourcesZip }) {
   const issuer = requireEnv('AMO_JWT_ISSUER');
   const secret = requireEnv('AMO_JWT_SECRET');
 
-  const args = [
-    'wxt', 'submit',
-    '--firefox-zip', firefoxZip,
-    '--firefox-extension-id', FIREFOX_EXTENSION_ID,
-    '--firefox-jwt-issuer', issuer,
-    '--firefox-jwt-secret', secret,
-    '--firefox-channel', 'listed',
-  ];
-  if (sourcesZip) args.push('--firefox-sources-zip', sourcesZip);
+  // Critical: pass secrets via env vars, NEVER as CLI args — argv is visible
+  // in `ps aux` and gets echoed in error stack traces. publish-browser-extension
+  // accepts UPPER_SNAKE_CASE env equivalents of every flag.
+  const childEnv = {
+    ...process.env,
+    FIREFOX_ZIP: firefoxZip,
+    FIREFOX_EXTENSION_ID,
+    FIREFOX_JWT_ISSUER: issuer,
+    FIREFOX_JWT_SECRET: secret,
+    FIREFOX_CHANNEL: 'listed',
+    ...(sourcesZip ? { FIREFOX_SOURCES_ZIP: sourcesZip } : {}),
+  };
 
-  // Pass secrets via env so they don't leak into shell history; pnpm forwards them.
-  const cmd = `pnpm exec ${args.map(escapeArg).join(' ')}`;
-  run(cmd, { stdio: 'inherit', env: process.env });
+  run('pnpm exec wxt submit', { stdio: 'inherit', env: childEnv });
   ok('Firefox submission complete (review pending on AMO).');
 }
 
@@ -288,10 +289,6 @@ async function uploadAsset(uploadUrl, zipPath, token) {
   const json = await res.json();
   if (!json.id) die(`Upload of ${zipName} failed: ${JSON.stringify(json)}`);
   ok(`Asset uploaded: ${json.browser_download_url}`);
-}
-
-function escapeArg(arg) {
-  return /[^A-Za-z0-9._@\/=:\-]/.test(arg) ? `'${String(arg).replace(/'/g, "'\\''")}'` : arg;
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────
