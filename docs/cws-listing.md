@@ -88,7 +88,7 @@ English (en)
 | Store icon | 128×128 | ✅ required | `public/icon-128.png` (auto-bundled in zip) |
 | Small promo tile | 440×280 | ✅ required | `docs/cws-assets/promo-440x280-small.png` |
 | Marquee promo tile | 1400×560 | optional but recommended | `docs/cws-assets/promo-1400x560-marquee.png` |
-| Screenshots | 1280×800 *or* 640×400 | ✅ at least 1, up to 5 | **TODO — see section 5** |
+| Screenshots | 1280×800 *or* 640×400 | ✅ at least 1, up to 5 | `docs/cws-assets/screenshots/01-sidebar-on-react.png`, `02-sidebar-on-richcard.png` |
 
 ---
 
@@ -162,33 +162,21 @@ No
 
 ---
 
-## 5. Screenshots — TODO (5 minutes manual)
+## 5. Screenshots
 
-CWS requires at least one screenshot at **1280×800** or **640×400** PNG/JPEG.
-None are in the repo yet — capture them once and save under `docs/cws-assets/screenshots/`.
+Two captured at exactly **1280×800** (CWS requirement):
 
-Suggested captures (3–5 screenshots in this order):
+| File | Subject |
+|------|---------|
+| `docs/cws-assets/screenshots/01-sidebar-on-react.png` | facebook/react with sidebar — 244k stars, topics, MIT license, full link panel |
+| `docs/cws-assets/screenshots/02-sidebar-on-richcard.png` | xinbenlv/github-richcard — dogfood / project's own listing |
 
-1. **`01-sidebar-overview.png`** — github.com/torvalds/linux with sidebar slid in,
-   showing stars/forks/issues/topics.
-2. **`02-collab-graph.png`** — same page, sidebar's contributor graph tab active,
-   nodes laid out.
-3. **`03-deepwiki-jump.png`** — hover/click state on the DeepWiki button.
-4. **`04-follow-badges.png`** — a contributor list (e.g. github.com/xinbenlv?tab=followers)
-   with green checkmarks on followed users.
-5. **`05-private-repo.png`** *(optional)* — a private repo of yours, sidebar visible
-   (blur out anything sensitive).
-
-How to capture at the right size:
-
-```sh
-# In Chrome: open DevTools → device toolbar (Cmd+Shift+M) → set to 1280×800,
-# disable device frame, then use macOS Cmd+Shift+4 → space → click viewport,
-# OR use Chrome's "Capture full size screenshot" via DevTools command menu.
-```
-
-Save them under `docs/cws-assets/screenshots/` then upload via the dev-console
-"Graphic assets" panel.
+Optional follow-ups (not required for submission):
+- A screenshot of the contributor collaboration graph rendered (currently blocked by
+  the CORS bug tracked in #17 — once fixed, capture facebook/react with
+  the graph tab expanded).
+- A screenshot of the green-checkmark follow badges on a contributor list page
+  (requires being logged into github.com).
 
 ---
 

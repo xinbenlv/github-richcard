@@ -11,6 +11,10 @@ Commit messages follow [Conventional Commits](https://www.conventionalcommits.or
 ### Fixed
 - Real PNG icons at 16/32/48/128 (previous versions shipped a single 16×16
   placeholder cloned to all four sizes, which would have been rejected by CWS).
+- `fetchRepoInfo` no longer breaks for logged-out users: tries an unauthenticated
+  request first and falls back to `credentials: 'include'` only on 404 (partial
+  fix for #17 — `fetchFollowing` and contributor-graph fetch still need the
+  same treatment).
 
 ### Added
 - Firefox build target (`pnpm zip -b firefox`) with `browser_specific_settings.gecko.id`.

@@ -43,10 +43,16 @@ export function parseGithubRepo(url: string): ParsedGithubRepo | null {
 }
 
 export async function fetchRepoInfo(owner: string, repo: string): Promise<RepoInfo> {
-  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-    headers: { Accept: 'application/vnd.github.v3+json' },
-    credentials: 'include',
-  });
+  // api.github.com responds with `Access-Control-Allow-Origin: *` for unauthenticated
+  // requests, which CORS forbids when credentials mode is "include". So try without
+  // credentials first (public repos), then retry with credentials only if the public
+  // request 404s — that's the signal the repo might be private and needs cookie auth.
+  const url = `https://api.github.com/repos/${owner}/${repo}`;
+  const headers = { Accept: 'application/vnd.github.v3+json' };
+  let res = await fetch(url, { headers });
+  if (res.status === 404) {
+    res = await fetch(url, { headers, credentials: 'include' });
+  }
   if (!res.ok) throw new Error(`GitHub API ${res.status}: ${res.statusText}`);
   const d = await res.json();
   return {
