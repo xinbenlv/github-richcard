@@ -159,6 +159,7 @@ No
 |-------|-------|
 | Homepage URL | `https://github.com/xinbenlv/github-richcard` |
 | Support URL  | `https://github.com/xinbenlv/github-richcard/issues` |
+| Privacy policy URL | `https://github.com/xinbenlv/github-richcard/blob/main/docs/privacy-policy.md` |
 
 ---
 
