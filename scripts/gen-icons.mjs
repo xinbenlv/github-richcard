@@ -86,6 +86,10 @@ async function tile(width, height, label) {
   console.log(`  ✔ ${path}`);
 }
 
-await tile(440, 280, 'small');
-await tile(1400, 560, 'marquee');
+// CWS sizes
+await tile(440, 280, 'cws-small');
+await tile(1400, 560, 'cws-marquee');
+// Edge Add-ons sizes
+await tile(300, 200, 'edge-small');
+await tile(844, 312, 'edge-large');
 console.log('\nDone.');
