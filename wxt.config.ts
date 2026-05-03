@@ -22,6 +22,9 @@ export default defineConfig({
       gecko: {
         id: 'github-richcard@xinbenlv',
         strict_min_version: '109.0',
+        data_collection_permissions: {
+          required: ['none'],
+        },
       },
     },
   },
