@@ -4,19 +4,26 @@
  *
  * Usage:
  *   node scripts/deploy.mjs github         # GitHub release (Chrome + Firefox + sources zips attached)
- *   node scripts/deploy.mjs firefox        # AMO submission (Firefox)
- *   node scripts/deploy.mjs cws            # Chrome Web Store  (TODO — manual upload for now)
- *   node scripts/deploy.mjs all            # github + firefox  (cws is manual until automated)
+ *   node scripts/deploy.mjs firefox        # AMO submission
+ *   node scripts/deploy.mjs cws            # Chrome Web Store submission
+ *   node scripts/deploy.mjs edge           # Microsoft Edge Add-ons submission
+ *   node scripts/deploy.mjs all            # github + firefox + cws + edge
  *   node scripts/deploy.mjs                # defaults to "github"
  *
- * Required env vars:
+ * Required env vars (github target):
  *   GITHUB_PAT_XINBENLV_PUBLIC_REPO_ALL_READWRITE  — GitHub PAT (or legacy XINBENLV_PAT_FOR_PUBLIC_REPO)
- *   AMO_JWT_ISSUER                                 — addons.mozilla.org JWT issuer (firefox target)
- *   AMO_JWT_SECRET                                 — addons.mozilla.org JWT secret (firefox target)
+ *
+ * Required env vars (firefox target):
+ *   AMO_JWT_ISSUER                                 — addons.mozilla.org JWT issuer
+ *   AMO_JWT_SECRET                                 — addons.mozilla.org JWT secret
  *
  * Required env vars (cws target):
  *   CWS_KEY_FILE                                   — absolute path to GCP service-account JSON
  *                                                    (the SA must be a publisher on the CWS listing)
+ *
+ * Required env vars (edge target):
+ *   EDGE_CLIENT_ID                                 — Partner Center API client id
+ *   EDGE_API_KEY                                   — Partner Center API key (v1.1 auth)
  */
 
 import { execSync } from 'child_process';
@@ -80,6 +87,8 @@ const FIREFOX_EXTENSION_ID = 'github-richcard@xinbenlv';
 const CWS_EXTENSION_ID = 'ehpaamakfflbhfeklicfimdoplkhnfhm';
 const CWS_API = 'https://www.googleapis.com/upload/chromewebstore/v1.1/items';
 const CWS_PUBLISH_API = 'https://www.googleapis.com/chromewebstore/v1.1/items';
+const EDGE_PRODUCT_ID = 'a5fbc640-5e35-46d8-a4c8-d1da89e7dafa';
+const EDGE_STORE_ID = '0RDCKCGBM60Z';
 
 // ── build ─────────────────────────────────────────────────────────────────────
 
@@ -189,6 +198,24 @@ async function deployFirefox({ firefoxZip, sourcesZip }) {
   ok('Firefox submission complete (review pending on AMO).');
 }
 
+async function deployEdge({ chromeZip }) {
+  log(`Submitting ${TAG} to Microsoft Edge Add-ons…`);
+  const clientId = requireEnv('EDGE_CLIENT_ID');
+  const apiKey = requireEnv('EDGE_API_KEY');
+
+  // Same lesson as deployFirefox — secrets only via env, never argv.
+  const childEnv = {
+    ...process.env,
+    EDGE_ZIP: chromeZip,
+    EDGE_PRODUCT_ID,
+    EDGE_CLIENT_ID: clientId,
+    EDGE_API_KEY: apiKey,
+  };
+
+  run('pnpm exec wxt submit', { stdio: 'inherit', env: childEnv });
+  ok('Edge submission complete (certification pending).');
+}
+
 async function deployCws({ chromeZip }) {
   log(`Uploading ${TAG} to Chrome Web Store…`);
   const keyFile = requireEnv('CWS_KEY_FILE');
@@ -294,12 +321,13 @@ async function uploadAsset(uploadUrl, zipPath, token) {
 // ── main ──────────────────────────────────────────────────────────────────────
 
 const target = process.argv[2] ?? 'github';
-if (!['github', 'firefox', 'cws', 'all'].includes(target)) {
-  die(`Unknown target "${target}". Use: github | firefox | cws | all`);
+if (!['github', 'firefox', 'cws', 'edge', 'all'].includes(target)) {
+  die(`Unknown target "${target}". Use: github | firefox | cws | edge | all`);
 }
 
 const zips = buildAll();
 
 if (target === 'github'  || target === 'all') await deployGithub(zips);
 if (target === 'firefox' || target === 'all') await deployFirefox(zips);
-if (target === 'cws')                          await deployCws();
+if (target === 'cws'     || target === 'all') await deployCws(zips);
+if (target === 'edge'    || target === 'all') await deployEdge(zips);

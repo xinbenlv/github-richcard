@@ -14,6 +14,7 @@
     "deploy:github": "node scripts/deploy.mjs github",
     "deploy:firefox": "node scripts/deploy.mjs firefox",
     "deploy:cws": "node scripts/deploy.mjs cws",
+    "deploy:edge": "node scripts/deploy.mjs edge",
     "deploy:all": "node scripts/deploy.mjs all",
     "install:local": "bash scripts/install.sh"
   },
