@@ -3,6 +3,7 @@
   "version": "0.2.3",
   "description": "Chrome extension — extended info for GitHub repos: DeepWiki, stats, and more",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",
