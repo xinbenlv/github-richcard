@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/).
 
+## [0.2.4] - 2026-05-08
+
+### Changed
+- Collaboration Graph is now expanded by default and seeds with the current
+  repo at the center plus every fetched contributor — so you always see at
+  least the repo + its contributors, even when there are no shared repos.
+- Other repos in the graph are ranked by `shared contributors × stars`
+  (descending), capped to the top 12, with each entry showing stars and the
+  shared-contributor count in its tooltip.
+
 ## [0.2.3] - 2026-05-03
 
 ### Fixed
@@ -57,6 +67,7 @@ Commit messages follow [Conventional Commits](https://www.conventionalcommits.or
 
 Initial public release.
 
+[0.2.4]: https://github.com/xinbenlv/github-richcard/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/xinbenlv/github-richcard/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/xinbenlv/github-richcard/compare/v0.2.0...v0.2.2
 [0.2.0]: https://github.com/xinbenlv/github-richcard/compare/v0.1.2...v0.2.0
