@@ -30,7 +30,7 @@ import { execSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { homedir } from 'os';
+import { homedir, tmpdir } from 'os';
 
 // ── .env loader (no external dependency) ─────────────────────────────────────
 // Loads ~/.env first, then ./.env in the repo. Later sources override earlier.
@@ -108,7 +108,65 @@ function buildAll() {
   ok(`Chrome:  ${chromeZip}`);
   ok(`Firefox: ${firefoxZip}`);
   if (sourcesZip) ok(`Sources: ${sourcesZip}`);
+
+  verifyManifestIcons(chromeZip);
+  verifyManifestIcons(firefoxZip);
+
   return { chromeZip, firefoxZip, sourcesZip };
+}
+
+// Reads PNG IHDR chunk to recover (width, height) without spawning sharp/imagemagick.
+// PNG layout: 8-byte signature, then IHDR chunk (4-byte length, "IHDR", 4-byte width,
+// 4-byte height, …). Width/height are big-endian uint32.
+function readPngDimensions(buf) {
+  if (buf.length < 24) throw new Error('file too small to be a PNG');
+  const sig = buf.subarray(0, 8).toString('hex');
+  if (sig !== '89504e470d0a1a0a') throw new Error('not a PNG (bad signature)');
+  if (buf.subarray(12, 16).toString('ascii') !== 'IHDR') throw new Error('PNG missing IHDR');
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
+
+// Guards against the v0.2.0 regression: wxt's default scaffold ships a single
+// 16×16 placeholder cloned to every icon slot. CWS happily accepts the upload,
+// but Chromium's SandboxedUnpacker rejects it at install time with
+// "Could not decode image: 'icon-128.png'". We catch it here instead.
+function verifyManifestIcons(zipPath) {
+  log(`Verifying icons in ${zipPath.split('/').pop()}…`);
+  const tmp = join(tmpdir(), `richcard-verify-${process.pid}-${Date.now()}`);
+  run(`mkdir -p ${tmp}`);
+  try {
+    run(`unzip -qo "${zipPath}" -d "${tmp}"`);
+    const manifest = JSON.parse(readFileSync(join(tmp, 'manifest.json'), 'utf8'));
+    const icons = manifest.icons ?? {};
+    const actionIcons = manifest.action?.default_icon ?? {};
+    const allDeclared = { ...icons, ...(typeof actionIcons === 'object' ? actionIcons : {}) };
+    const errors = [];
+    for (const [sizeKey, relPath] of Object.entries(allDeclared)) {
+      const expected = Number(sizeKey);
+      if (!Number.isFinite(expected)) continue;
+      const iconPath = join(tmp, relPath);
+      if (!existsSync(iconPath)) {
+        errors.push(`${relPath} declared for size ${expected} is missing`);
+        continue;
+      }
+      const buf = readFileSync(iconPath);
+      let dims;
+      try { dims = readPngDimensions(buf); }
+      catch (e) { errors.push(`${relPath}: ${e.message}`); continue; }
+      if (dims.width !== expected || dims.height !== expected) {
+        errors.push(
+          `${relPath} declared as ${expected}×${expected} but file is ${dims.width}×${dims.height} ` +
+          `— Chromium's installer will reject this with "Could not decode image"`,
+        );
+      }
+    }
+    if (errors.length) {
+      die('Icon validation failed:\n  • ' + errors.join('\n  • '));
+    }
+    ok('Icons OK');
+  } finally {
+    run(`rm -rf "${tmp}"`);
+  }
 }
 
 // ── targets ───────────────────────────────────────────────────────────────────
