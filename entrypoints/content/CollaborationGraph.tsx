@@ -18,6 +18,7 @@ import {
 const COLORS = {
   contributor: '#58a6ff',
   repo: '#30363d',
+  currentRepo: '#f78166',
   owner: '#3fb950',
   bg: '#161b22',
   text: '#c9d1d9',
@@ -33,7 +34,7 @@ type SimNode = GraphNode & SimulationNodeDatum;
 type SimLink = SimulationLinkDatum<SimNode> & { source: SimNode | string; target: SimNode | string };
 
 export function CollaborationGraph({ owner, repo }: { owner: string; repo: string }) {
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<CollabGraphData | null>(null);
   const [nodes, setNodes] = useState<SimNode[]>([]);
@@ -235,9 +236,12 @@ export function CollaborationGraph({ owner, repo }: { owner: string; repo: strin
                         </g>
                       );
                     }
-                    // Repo node — rounded rect
-                    const rw = 40;
-                    const rh = 16;
+                    // Repo node — rounded rect; the current repo is highlighted and slightly larger
+                    const isCurrent = node.isCurrent === true;
+                    const rw = isCurrent ? 56 : 40;
+                    const rh = isCurrent ? 20 : 16;
+                    const fill = isCurrent ? COLORS.currentRepo : COLORS.repo;
+                    const tipText = repoTooltipText(node);
                     return (
                       <g
                         key={node.id}
@@ -245,7 +249,7 @@ export function CollaborationGraph({ owner, repo }: { owner: string; repo: strin
                         onPointerDown={(e) => handlePointerDown(e, node)}
                         onPointerEnter={(e) => {
                           const rect = svgRef.current?.getBoundingClientRect();
-                          if (rect) setTooltip({ x: e.clientX - rect.left, y: (node.y ?? 0) - 14, text: node.fullName });
+                          if (rect) setTooltip({ x: e.clientX - rect.left, y: (node.y ?? 0) - 14, text: tipText });
                         }}
                         onPointerLeave={() => setTooltip(null)}
                       >
@@ -255,18 +259,19 @@ export function CollaborationGraph({ owner, repo }: { owner: string; repo: strin
                           width={rw}
                           height={rh}
                           rx={4}
-                          fill={COLORS.repo}
-                          fillOpacity={0.85}
+                          fill={fill}
+                          fillOpacity={0.9}
                         />
                         <text
                           x={node.x}
-                          y={node.y + 3.5}
+                          y={node.y + (isCurrent ? 4 : 3.5)}
                           textAnchor="middle"
-                          fill={COLORS.text}
-                          fontSize="7"
+                          fill={isCurrent ? '#0d1117' : COLORS.text}
+                          fontSize={isCurrent ? '8.5' : '7'}
+                          fontWeight={isCurrent ? 700 : 400}
                           fontFamily="inherit"
                         >
-                          {truncate(node.name, 8)}
+                          {truncate(node.name, isCurrent ? 11 : 8)}
                         </text>
                       </g>
                     );
@@ -294,26 +299,43 @@ export function CollaborationGraph({ owner, repo }: { owner: string; repo: strin
               </div>
 
               {/* Legend */}
-              <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '10px', color: COLORS.textMuted }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 12px', marginTop: '8px', fontSize: '10px', color: COLORS.textMuted }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <svg width="8" height="8"><circle cx="4" cy="4" r="4" fill={COLORS.contributor} /></svg>
-                  contributor
+                  <svg width="10" height="8"><rect width="10" height="8" rx="2" fill={COLORS.currentRepo} /></svg>
+                  this repo
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <svg width="10" height="8"><rect width="10" height="8" rx="2" fill={COLORS.repo} /></svg>
-                  repo
+                  other repo
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <svg width="8" height="8"><circle cx="4" cy="4" r="4" fill={COLORS.contributor} /></svg>
+                  contributor
                 </span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <svg width="8" height="8"><circle cx="4" cy="4" r="4" fill={COLORS.owner} /></svg>
                   owner
                 </span>
               </div>
+              <p style={{ marginTop: '6px', fontSize: '10px', color: COLORS.textMuted, lineHeight: 1.4 }}>
+                Other repos ranked by shared contributors × stars.
+              </p>
             </>
           )}
         </div>
       )}
     </div>
   );
+}
+
+function repoTooltipText(node: Extract<GraphNode, { type: 'repo' }>): string {
+  if (node.isCurrent) return `${node.fullName} (this repo)`;
+  const parts: string[] = [node.fullName];
+  if (typeof node.stars === 'number') parts.push(`★${node.stars}`);
+  if (typeof node.sharedCount === 'number') {
+    parts.push(`${node.sharedCount} shared`);
+  }
+  return parts.join(' · ');
 }
 
 function nodeRadius(node: GraphNode): number {

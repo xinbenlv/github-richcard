@@ -1,6 +1,11 @@
 /**
  * Collaboration graph data fetching and construction.
- * Builds a bipartite graph of contributors ↔ shared repos.
+ *
+ * Graph shape:
+ *   - The current repo sits at the center, linked to every fetched contributor.
+ *   - Other repos owned by those contributors are included and ranked by
+ *     `sharedContributors × stars` (descending), capped to a small top‑N so
+ *     the SVG stays readable.
  */
 
 export interface ContributorNode {
@@ -16,6 +21,10 @@ export interface RepoNode {
   id: string;
   name: string;
   fullName: string;
+  stars?: number;
+  sharedCount?: number;
+  score?: number;
+  isCurrent?: boolean;
 }
 
 export type GraphNode = (ContributorNode | RepoNode) & {
@@ -43,6 +52,7 @@ interface CacheEntry {
 }
 
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
+const MAX_OTHER_REPOS = 12;
 
 async function ghFetch<T>(url: string): Promise<T | null> {
   try {
@@ -66,6 +76,7 @@ interface GHRepo {
   full_name: string;
   name: string;
   fork: boolean;
+  stargazers_count: number;
 }
 
 export async function fetchCollabGraph(
@@ -82,6 +93,9 @@ export async function fetchCollabGraph(
     }
   } catch { /* no cache available */ }
 
+  const currentFullName = `${owner}/${repo}`;
+  const currentRepoId = `repo:${currentFullName}`;
+
   // 1. Fetch contributors
   const contributors = await ghFetch<GHContributor[]>(
     `https://api.github.com/repos/${owner}/${repo}/contributors?per_page=15`,
@@ -90,81 +104,97 @@ export async function fetchCollabGraph(
     return { nodes: [], links: [] };
   }
 
-  // 2. For each contributor, fetch their repos
+  // 2. For each contributor, fetch the repos they own (excluding forks)
   const contributorRepos = new Map<string, Set<string>>();
-  const repoFullNames = new Map<string, string>(); // fullName -> name
+  const repoMeta = new Map<string, { name: string; stars: number }>();
 
   const fetches = contributors.map(async (c) => {
     const repos = await ghFetch<GHRepo[]>(
       `https://api.github.com/users/${c.login}/repos?type=owner&sort=updated&per_page=30`,
     );
     if (!repos) return;
-    const owned = repos
-      .filter((r) => !r.fork)
-      .map((r) => r.full_name);
-    contributorRepos.set(c.login, new Set(owned));
+    const owned = new Set<string>();
     for (const r of repos) {
-      if (!r.fork) repoFullNames.set(r.full_name, r.name);
+      if (r.fork) continue;
+      if (r.full_name === currentFullName) continue; // current repo handled separately
+      owned.add(r.full_name);
+      repoMeta.set(r.full_name, { name: r.name, stars: r.stargazers_count ?? 0 });
     }
+    contributorRepos.set(c.login, owned);
   });
   await Promise.all(fetches);
 
-  // 3. Cross-reference: find repos where 2+ contributors overlap
-  const repoContributorCount = new Map<string, string[]>();
+  // 3. For each "other" repo, collect which current-repo contributors own it
+  const repoContributors = new Map<string, string[]>();
   for (const [login, repos] of contributorRepos) {
     for (const fullName of repos) {
-      const list = repoContributorCount.get(fullName) ?? [];
+      const list = repoContributors.get(fullName) ?? [];
       list.push(login);
-      repoContributorCount.set(fullName, list);
+      repoContributors.set(fullName, list);
     }
   }
 
-  // Filter to repos with 2+ contributors from the current repo
-  const sharedRepos = new Map<string, string[]>();
-  for (const [fullName, logins] of repoContributorCount) {
-    if (logins.length >= 2) {
-      sharedRepos.set(fullName, logins);
-    }
-  }
+  // 4. Score = sharedCount × stars, rank desc, take top N
+  const ranked = [...repoContributors.entries()]
+    .map(([fullName, logins]) => {
+      const meta = repoMeta.get(fullName);
+      const stars = meta?.stars ?? 0;
+      const sharedCount = logins.length;
+      return {
+        fullName,
+        name: meta?.name ?? fullName.split('/')[1] ?? fullName,
+        stars,
+        logins,
+        sharedCount,
+        score: sharedCount * stars,
+      };
+    })
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_OTHER_REPOS);
 
-  // 4. Build graph data
-  const connectedContributors = new Set<string>();
-  for (const logins of sharedRepos.values()) {
-    for (const l of logins) connectedContributors.add(l);
-  }
-
+  // 5. Build graph: current repo at center + every contributor + ranked others
   const nodes: GraphNode[] = [];
   const links: GraphLink[] = [];
 
-  // Add contributor nodes (only those that appear in shared repos)
+  nodes.push({
+    type: 'repo',
+    id: currentRepoId,
+    name: repo,
+    fullName: currentFullName,
+    isCurrent: true,
+  });
+
   for (const c of contributors) {
-    if (!connectedContributors.has(c.login)) continue;
+    const userId = `user:${c.login}`;
     nodes.push({
       type: 'contributor',
-      id: `user:${c.login}`,
+      id: userId,
       login: c.login,
       contributions: c.contributions,
       isOwner: c.login.toLowerCase() === owner.toLowerCase(),
     });
+    links.push({ source: userId, target: currentRepoId });
   }
 
-  // Add repo nodes and edges
-  for (const [fullName, logins] of sharedRepos) {
-    const repoId = `repo:${fullName}`;
+  for (const r of ranked) {
+    const repoId = `repo:${r.fullName}`;
     nodes.push({
       type: 'repo',
       id: repoId,
-      name: repoFullNames.get(fullName) ?? fullName.split('/')[1],
-      fullName,
+      name: r.name,
+      fullName: r.fullName,
+      stars: r.stars,
+      sharedCount: r.sharedCount,
+      score: r.score,
     });
-    for (const login of logins) {
+    for (const login of r.logins) {
       links.push({ source: `user:${login}`, target: repoId });
     }
   }
 
   const data: CollabGraphData = { nodes, links };
 
-  // Cache result
   try {
     await chrome.storage.local.set({
       [cacheKey]: { data, timestamp: Date.now() } satisfies CacheEntry,
